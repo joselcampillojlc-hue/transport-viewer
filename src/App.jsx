@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, Truck, Printer, FileSpreadsheet, Trash2, Filter } from 'lucide-react';
+import { Upload, Truck, Printer, FileSpreadsheet, Trash2, Filter, FileUp } from 'lucide-react';
 
 function App() {
     const [data, setData] = useState([]);
@@ -9,6 +9,8 @@ function App() {
     const [selectedDriver, setSelectedDriver] = useState('');
     const [selectedMonth, setSelectedMonth] = useState('');
     const [selectedWeek, setSelectedWeek] = useState('');
+
+    const fileInputRef = useRef(null);
 
     // Load data from localStorage on mount
     useEffect(() => {
@@ -48,8 +50,19 @@ function App() {
             const jsonData = XLSX.utils.sheet_to_json(ws);
             setData(jsonData);
             localStorage.setItem('transportData', JSON.stringify(jsonData));
+
+            // Reset filters when new file is loaded
+            setSelectedDriver('');
+            setSelectedMonth('');
+            setSelectedWeek('');
         };
         reader.readAsBinaryString(file);
+    };
+
+    const triggerFileUpload = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
     };
 
     const getJsDate = (dateVal) => {
@@ -207,6 +220,20 @@ function App() {
                     <div className="flex gap-2">
                         {data.length > 0 && (
                             <>
+                                <input
+                                    type="file"
+                                    accept=".xlsx, .xls"
+                                    onChange={handleFileUpload}
+                                    className="hidden"
+                                    ref={fileInputRef}
+                                />
+                                <button
+                                    onClick={triggerFileUpload}
+                                    className="flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors"
+                                >
+                                    <FileUp size={20} />
+                                    Cambiar Archivo
+                                </button>
                                 <button
                                     onClick={clearData}
                                     className="flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors"
