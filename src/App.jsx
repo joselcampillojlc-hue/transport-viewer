@@ -167,7 +167,8 @@ function App() {
                                                 <th className="p-3 font-semibold text-gray-600">Origen</th>
                                                 <th className="p-3 font-semibold text-gray-600">Destino</th>
                                                 <th className="p-3 font-semibold text-gray-600">Mat. Contenedor</th>
-                                                <th className="p-3 font-semibold text-gray-600 text-right">Importe</th>
+                                                <th className="p-3 font-semibold text-gray-600 text-right">Precio</th>
+                                                <th className="p-3 font-semibold text-gray-600 text-right">Euros</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
@@ -184,14 +185,17 @@ function App() {
                                                     </td>
                                                     <td className="p-3 text-gray-700 font-mono">{row['Mat. Cont.'] || row['Matrícula Contenedor']}</td>
                                                     <td className="p-3 text-gray-900 font-semibold text-right">
-                                                        {parseFloat(row['Precio'] || row['Euros'] || row['Importe'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+                                                        {parseFloat(row['Precio'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td className="p-3 text-gray-900 font-semibold text-right">
+                                                        {parseFloat(row['Euros'] || row['Importe'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
                                                     </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                         <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200">
                                             <tr>
-                                                <td colSpan="4" className="p-3 text-right text-gray-600">TOTAL</td>
+                                                <td colSpan="5" className="p-3 text-right text-gray-600">TOTAL</td>
                                                 <td className="p-3 text-right text-black">
                                                     {totalImporte.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                                                 </td>
