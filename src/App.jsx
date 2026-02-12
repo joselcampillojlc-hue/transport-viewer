@@ -12,6 +12,8 @@ function App() {
 
     const fileInputRef = useRef(null);
 
+    const [debugInfo, setDebugInfo] = useState(null);
+
     // Load data from localStorage on mount
     useEffect(() => {
         const savedData = localStorage.getItem('transportData');
@@ -47,7 +49,39 @@ function App() {
             const wb = XLSX.read(bstr, { type: 'binary' });
             const wsname = wb.SheetNames[0];
             const ws = wb.Sheets[wsname];
-            const jsonData = XLSX.utils.sheet_to_json(ws);
+
+            // Convert to array of arrays to find the header row
+            const dataArrays = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+            let headerRowIndex = 0;
+            const keywords = ['Conductor', 'Fecha', 'Precio', 'Importe', 'Cliente', 'Origen', 'Destino'];
+
+            // Find row with most matching keywords
+            let maxMatches = 0;
+            dataArrays.slice(0, 20).forEach((row, index) => {
+                if (!Array.isArray(row)) return;
+                const matches = row.filter(cell =>
+                    typeof cell === 'string' && keywords.some(k => cell.toLowerCase().includes(k.toLowerCase()))
+                ).length;
+
+                if (matches > maxMatches) {
+                    maxMatches = matches;
+                    headerRowIndex = index;
+                }
+            });
+
+            // Read again with the correct header row
+            const jsonData = XLSX.utils.sheet_to_json(ws, { range: headerRowIndex });
+
+            // Set Debug Info
+            if (jsonData.length > 0) {
+                setDebugInfo({
+                    detectedHeaderRow: headerRowIndex,
+                    firstRowKeys: Object.keys(jsonData[0]),
+                    sampleRow: jsonData[0]
+                });
+            }
+
             setData(jsonData);
             localStorage.setItem('transportData', JSON.stringify(jsonData));
 
@@ -448,6 +482,16 @@ function App() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                )}
+
+                {/* Debug Info */}
+                {debugInfo && (
+                    <div className="mt-8 p-4 bg-gray-200 rounded text-xs font-mono overflow-auto print:hidden">
+                        <h3 className="font-bold text-gray-700 mb-2">Información de Depuración (Si no ves datos, envíame esto)</h3>
+                        <p>Fila de cabecera detectada (índice): {debugInfo.detectedHeaderRow}</p>
+                        <p>Columnas encontradas: {JSON.stringify(debugInfo.firstRowKeys)}</p>
+                        <p>Ejemplo de primera fila: {JSON.stringify(debugInfo.sampleRow)}</p>
                     </div>
                 )}
             </div>
