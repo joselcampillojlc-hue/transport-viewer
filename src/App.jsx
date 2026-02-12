@@ -1,18 +1,41 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, Truck, Printer, FileSpreadsheet } from 'lucide-react';
+import { Upload, Truck, Printer, FileSpreadsheet, Trash2, Filter } from 'lucide-react';
 
 function App() {
     const [data, setData] = useState([]);
     const [drivers, setDrivers] = useState([]);
+    const [months, setMonths] = useState([]);
+    const [weeks, setWeeks] = useState([]);
+
     const [selectedDriver, setSelectedDriver] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState('');
+    const [selectedWeek, setSelectedWeek] = useState('');
+
     const [fileName, setFileName] = useState('');
+
+    // Load data from localStorage on mount
+    useEffect(() => {
+        const savedData = localStorage.getItem('transportData');
+        const savedFileName = localStorage.getItem('transportFileName');
+        if (savedData) {
+            try {
+                const parsedData = JSON.parse(savedData);
+                processData(parsedData, false); // false = don't save again
+                if (savedFileName) setFileName(savedFileName);
+            } catch (e) {
+                console.error("Error loading data", e);
+            }
+        }
+    }, []);
 
     const handleFileUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
         setFileName(file.name);
+        localStorage.setItem('transportFileName', file.name);
+
         const reader = new FileReader();
         reader.onload = (evt) => {
             const bstr = evt.target.result;
@@ -20,22 +43,100 @@ function App() {
             const wsname = wb.SheetNames[0];
             const ws = wb.Sheets[wsname];
             const jsonData = XLSX.utils.sheet_to_json(ws);
-            processData(jsonData);
+            processData(jsonData, true);
         };
         reader.readAsBinaryString(file);
     };
 
-    const processData = (jsonData) => {
+    const getJsDate = (dateVal) => {
+        if (!dateVal) return null;
+        if (typeof dateVal === 'number') {
+            return new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+        }
+        return new Date(dateVal);
+    }
+
+    const processData = (jsonData, save = true) => {
+        if (save) {
+            setData(jsonData);
+            localStorage.setItem('transportData', JSON.stringify(jsonData));
+        } else {
+            setData(jsonData);
+        }
+
         // Extract unique drivers
         const uniqueDrivers = [...new Set(jsonData.map(row => row.Conductor).filter(Boolean))].sort();
         setDrivers(uniqueDrivers);
-        setData(jsonData);
+
+        // Extract months and weeks
+        const uniqueMonths = new Set();
+        const uniqueWeeks = new Set();
+
+        jsonData.forEach(row => {
+            const date = getJsDate(row['F.Carga'] || row['Fecha Carga']);
+            if (date && !isNaN(date)) {
+                const monthStr = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+                uniqueMonths.add(monthStr);
+
+                // Simple week calculation (Week N - Year)
+                const oneJan = new Date(date.getFullYear(), 0, 1);
+                const numberOfDays = Math.floor((date - oneJan) / (24 * 60 * 60 * 1000));
+                const weekNum = Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
+                uniqueWeeks.add(`Semana ${weekNum} - ${date.getFullYear()}`);
+            }
+        });
+
+        // Custom sort for months could be added, here just alpha sorted or insertion order if simple
+        setMonths([...uniqueMonths].sort());
+        // Sort weeks naturally if possible, or string sort
+        setWeeks([...uniqueWeeks].sort((a, b) => {
+            // Extract week number for sorting
+            const getNum = s => parseInt(s.match(/\d+/)[0]);
+            return getNum(a) - getNum(b);
+        }));
+    };
+
+    const clearData = () => {
+        if (window.confirm('¿Estás seguro de que quieres borrar todos los datos guardados?')) {
+            localStorage.removeItem('transportData');
+            localStorage.removeItem('transportFileName');
+            setData([]);
+            setDrivers([]);
+            setMonths([]);
+            setWeeks([]);
+            setFileName('');
+            setSelectedDriver('');
+            setSelectedMonth('');
+            setSelectedWeek('');
+        }
     };
 
     const filteredData = useMemo(() => {
-        if (!selectedDriver) return [];
-        return data.filter(row => row.Conductor === selectedDriver);
-    }, [data, selectedDriver]);
+        return data.filter(row => {
+            // Driver filter
+            if (selectedDriver && row.Conductor !== selectedDriver) return false;
+
+            const date = getJsDate(row['F.Carga'] || row['Fecha Carga']);
+            if (!date) return false;
+
+            // Month filter
+            if (selectedMonth) {
+                const monthStr = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+                if (monthStr !== selectedMonth) return false;
+            }
+
+            // Week filter
+            if (selectedWeek) {
+                const oneJan = new Date(date.getFullYear(), 0, 1);
+                const numberOfDays = Math.floor((date - oneJan) / (24 * 60 * 60 * 1000));
+                const weekNum = Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
+                const weekStr = `Semana ${weekNum} - ${date.getFullYear()}`;
+                if (weekStr !== selectedWeek) return false;
+            }
+
+            return true;
+        });
+    }, [data, selectedDriver, selectedMonth, selectedWeek]);
 
     const totalImporte = useMemo(() => {
         return filteredData.reduce((sum, row) => {
@@ -45,14 +146,8 @@ function App() {
     }, [filteredData]);
 
     const formatDate = (dateVal) => {
-        if (!dateVal) return '';
-        // Handle Excel serial date
-        if (typeof dateVal === 'number') {
-            const date = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
-            return date.toLocaleDateString('es-ES');
-        }
-        // Handle string date
-        return new Date(dateVal).toLocaleDateString('es-ES');
+        const date = getJsDate(dateVal);
+        return date ? date.toLocaleDateString('es-ES') : '';
     };
 
     const handlePrint = () => {
@@ -61,25 +156,39 @@ function App() {
 
     return (
         <div className="min-h-screen bg-gray-100 p-8 print:p-0 print:bg-white">
-            <div className="max-w-5xl mx-auto print:max-w-none">
+            <div className="max-w-6xl mx-auto print:max-w-none">
 
-                {/* Header - Hidden in Print if needed, or styled simpler */}
-                <header className="mb-8 flex justify-between items-center print:hidden">
+                {/* Header */}
+                <header className="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 print:hidden">
                     <div className="flex items-center gap-3">
                         <div className="p-3 bg-blue-600 rounded-lg text-white">
                             <Truck size={24} />
                         </div>
-                        <h1 className="text-2xl font-bold text-gray-800">Visor de Transportes</h1>
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">Visor de Transportes</h1>
+                            {fileName && <p className="text-sm text-gray-500">Archivo: {fileName}</p>}
+                        </div>
                     </div>
-                    {data.length > 0 && (
-                        <button
-                            onClick={handlePrint}
-                            className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-                        >
-                            <Printer size={20} />
-                            Imprimir Informe
-                        </button>
-                    )}
+                    <div className="flex gap-2">
+                        {data.length > 0 && (
+                            <>
+                                <button
+                                    onClick={clearData}
+                                    className="flex items-center gap-2 bg-red-100 text-red-700 px-4 py-2 rounded-lg hover:bg-red-200 transition-colors"
+                                >
+                                    <Trash2 size={20} />
+                                    Borrar Datos
+                                </button>
+                                <button
+                                    onClick={handlePrint}
+                                    className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+                                >
+                                    <Printer size={20} />
+                                    Imprimir
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </header>
 
                 {/* File Upload Section */}
@@ -111,100 +220,144 @@ function App() {
                 {data.length > 0 && (
                     <div className="space-y-6">
 
-                        {/* Driver Selector - Hidden in Print */}
+                        {/* Filters - Hidden in Print */}
                         <div className="bg-white p-6 rounded-lg shadow-sm print:hidden">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Seleccionar Conductor</label>
-                            <select
-                                value={selectedDriver}
-                                onChange={(e) => setSelectedDriver(e.target.value)}
-                                className="w-full md:w-1/3 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                <option value="">-- Elige un conductor --</option>
-                                {drivers.map(d => (
-                                    <option key={d} value={d}>{d}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {selectedDriver && (
-                            <div id="printable-area" className="bg-white p-8 rounded-lg shadow-sm print:shadow-none print:p-0">
-
-                                {/* Report Header */}
-                                <div className="border-b pb-6 mb-6">
-                                    <h2 className="text-3xl font-bold text-gray-800 mb-2">Informe de Transportes</h2>
-                                    <div className="flex justify-between items-end">
-                                        <div>
-                                            <p className="text-gray-500">Conductor</p>
-                                            <p className="text-xl font-semibold text-blue-600">{selectedDriver}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-gray-500">Fecha de Emisión</p>
-                                            <p className="font-medium">{new Date().toLocaleDateString('es-ES')}</p>
-                                        </div>
-                                    </div>
+                            <div className="flex items-center gap-2 mb-4 text-gray-700 font-semibold">
+                                <Filter size={20} />
+                                Filtros
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Conductor</label>
+                                    <select
+                                        value={selectedDriver}
+                                        onChange={(e) => setSelectedDriver(e.target.value)}
+                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Todos los conductores</option>
+                                        {drivers.map(d => (
+                                            <option key={d} value={d}>{d}</option>
+                                        ))}
+                                    </select>
                                 </div>
-
-                                {/* Summary Stats */}
-                                <div className="grid grid-cols-2 gap-4 mb-8 print:mb-4">
-                                    <div className="bg-blue-50 p-4 rounded-lg print:border print:bg-white">
-                                        <p className="text-sm text-blue-600 font-medium">Total Viajes</p>
-                                        <p className="text-2xl font-bold text-blue-900">{filteredData.length}</p>
-                                    </div>
-                                    <div className="bg-green-50 p-4 rounded-lg print:border print:bg-white">
-                                        <p className="text-sm text-green-600 font-medium">Total Importe</p>
-                                        <p className="text-2xl font-bold text-green-900">
-                                            {totalImporte.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                                        </p>
-                                    </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Mes</label>
+                                    <select
+                                        value={selectedMonth}
+                                        onChange={(e) => setSelectedMonth(e.target.value)}
+                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Todos los meses</option>
+                                        {months.map(m => (
+                                            <option key={m} value={m}>{m}</option>
+                                        ))}
+                                    </select>
                                 </div>
-
-                                {/* Table */}
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-gray-50 border-b-2 border-gray-200">
-                                            <tr>
-                                                <th className="p-3 font-semibold text-gray-600">Fecha</th>
-                                                <th className="p-3 font-semibold text-gray-600">Origen</th>
-                                                <th className="p-3 font-semibold text-gray-600">Destino</th>
-                                                <th className="p-3 font-semibold text-gray-600">Mat. Contenedor</th>
-                                                <th className="p-3 font-semibold text-gray-600 text-right">Precio</th>
-                                                <th className="p-3 font-semibold text-gray-600 text-right">Precio+Adicional</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {filteredData.map((row, idx) => (
-                                                <tr key={idx} className="hover:bg-gray-50">
-                                                    <td className="p-3 text-gray-700">{formatDate(row['F.Carga'] || row['Fecha Carga'])}</td>
-                                                    <td className="p-3 text-gray-700">
-                                                        <div className="font-medium">{row['Pobl. Carga'] || row['Población Origen']}</div>
-                                                        <div className="text-xs text-gray-500">{row['Ori.Emp'] || row['Empresa Origen']}</div>
-                                                    </td>
-                                                    <td className="p-3 text-gray-700">
-                                                        <div className="font-medium">{row['Pobl. Descarga'] || row['Población Destino']}</div>
-                                                        <div className="text-xs text-gray-500">{row['Des.Emp'] || row['Empresa Destino']}</div>
-                                                    </td>
-                                                    <td className="p-3 text-gray-700 font-mono">{row['Mat. Cont.'] || row['Matrícula Contenedor']}</td>
-                                                    <td className="p-3 text-gray-900 font-semibold text-right">
-                                                        {parseFloat(row['Precio'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td className="p-3 text-gray-900 font-semibold text-right">
-                                                        {parseFloat(row['Euros'] || row['Importe'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200">
-                                            <tr>
-                                                <td colSpan="5" className="p-3 text-right text-gray-600">TOTAL</td>
-                                                <td className="p-3 text-right text-black">
-                                                    {totalImporte.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Semana</label>
+                                    <select
+                                        value={selectedWeek}
+                                        onChange={(e) => setSelectedWeek(e.target.value)}
+                                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    >
+                                        <option value="">Todas las semanas</option>
+                                        {weeks.map(w => (
+                                            <option key={w} value={w}>{w}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
-                        )}
+                        </div>
+
+                        {/* Report View */}
+                        <div id="printable-area" className="bg-white p-8 rounded-lg shadow-sm print:shadow-none print:p-0">
+
+                            {/* Report Header */}
+                            <div className="border-b pb-6 mb-6">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h2 className="text-3xl font-bold text-gray-800 mb-2">Informe de Transportes</h2>
+                                        <div className="space-y-1 text-gray-600">
+                                            {selectedDriver && <p>Conductor: <span className="font-semibold text-blue-600">{selectedDriver}</span></p>}
+                                            {selectedMonth && <p>Mes: <span className="font-semibold">{selectedMonth}</span></p>}
+                                            {selectedWeek && <p>Semana: <span className="font-semibold">{selectedWeek}</span></p>}
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-gray-500">Fecha de Emisión</p>
+                                        <p className="font-medium">{new Date().toLocaleDateString('es-ES')}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Summary Stats */}
+                            <div className="grid grid-cols-2 gap-4 mb-8 print:mb-4">
+                                <div className="bg-blue-50 p-4 rounded-lg print:border print:bg-white">
+                                    <p className="text-sm text-blue-600 font-medium">Total Viajes Seleccionados</p>
+                                    <p className="text-2xl font-bold text-blue-900">{filteredData.length}</p>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg print:border print:bg-white">
+                                    <p className="text-sm text-green-600 font-medium">Total Importe</p>
+                                    <p className="text-2xl font-bold text-green-900">
+                                        {totalImporte.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Table */}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-gray-50 border-b-2 border-gray-200">
+                                        <tr>
+                                            <th className="p-3 font-semibold text-gray-600">Fecha</th>
+                                            {!selectedDriver && <th className="p-3 font-semibold text-gray-600">Conductor</th>}
+                                            <th className="p-3 font-semibold text-gray-600">Origen</th>
+                                            <th className="p-3 font-semibold text-gray-600">Destino</th>
+                                            <th className="p-3 font-semibold text-gray-600">Mat. Contenedor</th>
+                                            <th className="p-3 font-semibold text-gray-600 text-right">Precio</th>
+                                            <th className="p-3 font-semibold text-gray-600 text-right">Precio+Adicional</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {filteredData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="p-3 text-gray-700">{formatDate(row['F.Carga'] || row['Fecha Carga'])}</td>
+                                                {!selectedDriver && <td className="p-3 text-gray-700 font-medium">{row['Conductor']}</td>}
+                                                <td className="p-3 text-gray-700">
+                                                    <div className="font-medium">{row['Pobl. Carga'] || row['Población Origen']}</div>
+                                                    <div className="text-xs text-gray-500">{row['Ori.Emp'] || row['Empresa Origen']}</div>
+                                                </td>
+                                                <td className="p-3 text-gray-700">
+                                                    <div className="font-medium">{row['Pobl. Descarga'] || row['Población Destino']}</div>
+                                                    <div className="text-xs text-gray-500">{row['Des.Emp'] || row['Empresa Destino']}</div>
+                                                </td>
+                                                <td className="p-3 text-gray-700 font-mono">{row['Mat. Cont.'] || row['Matrícula Contenedor']}</td>
+                                                <td className="p-3 text-gray-900 font-semibold text-right">
+                                                    {parseFloat(row['Precio'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="p-3 text-gray-900 font-semibold text-right">
+                                                    {parseFloat(row['Euros'] || row['Importe'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-gray-50 font-bold border-t-2 border-gray-200">
+                                        <tr>
+                                            <td colSpan={!selectedDriver ? "6" : "5"} className="p-3 text-right text-gray-600">TOTAL</td>
+                                            <td className="p-3 text-right text-black">
+                                                {totalImporte.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            {filteredData.length === 0 && (
+                                <div className="text-center py-8 text-gray-500">
+                                    No hay datos que coincidan con los filtros seleccionados.
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
