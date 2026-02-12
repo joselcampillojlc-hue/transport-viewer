@@ -168,7 +168,7 @@ function App() {
                                                 <th className="p-3 font-semibold text-gray-600">Destino</th>
                                                 <th className="p-3 font-semibold text-gray-600">Mat. Contenedor</th>
                                                 <th className="p-3 font-semibold text-gray-600 text-right">Precio</th>
-                                                <th className="p-3 font-semibold text-gray-600 text-right">Euros</th>
+                                                <th className="p-3 font-semibold text-gray-600 text-right">Precio+Adicional</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
