@@ -65,12 +65,26 @@ function App() {
         }
     };
 
-    const getJsDate = (dateVal) => {
-        if (!dateVal) return null;
-        if (typeof dateVal === 'number') {
-            return new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+    // Helper to find key case-insensitively and handle variations
+    const findVal = (row, possibleKeys) => {
+        const rowKeys = Object.keys(row);
+        for (const key of possibleKeys) {
+            // Exact match
+            if (row[key] !== undefined) return row[key];
+            // Case insensitive match
+            const foundKey = rowKeys.find(k => k.toLowerCase() === key.toLowerCase());
+            if (foundKey) return row[foundKey];
         }
-        return new Date(dateVal);
+        return undefined;
+    };
+
+    const getJsDate = (row) => {
+        const val = findVal(row, ['F.Carga', 'Fecha Carga', 'Fecha', 'Date']);
+        if (!val) return null;
+        if (typeof val === 'number') {
+            return new Date(Math.round((val - 25569) * 86400 * 1000));
+        }
+        return new Date(val);
     }
 
     // Derived state for dropdowns (updates automatically when data changes)
@@ -80,9 +94,10 @@ function App() {
         const w = new Set();
 
         data.forEach(row => {
-            if (row.Conductor) d.add(row.Conductor);
+            const conductor = findVal(row, ['Conductor', 'Chofer', 'Driver']);
+            if (conductor) d.add(conductor);
 
-            const date = getJsDate(row['F.Carga'] || row['Fecha Carga']);
+            const date = getJsDate(row);
             if (date && !isNaN(date)) {
                 const monthStr = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
                 m.add(monthStr);
@@ -120,7 +135,7 @@ function App() {
 
         if (selectedWeek) {
             newData = newData.filter(row => {
-                const date = getJsDate(row['F.Carga'] || row['Fecha Carga']);
+                const date = getJsDate(row);
                 if (!date) return true;
                 const oneJan = new Date(date.getFullYear(), 0, 1);
                 const numberOfDays = Math.floor((date - oneJan) / (24 * 60 * 60 * 1000));
@@ -131,7 +146,7 @@ function App() {
             setSelectedWeek('');
         } else if (selectedMonth) {
             newData = newData.filter(row => {
-                const date = getJsDate(row['F.Carga'] || row['Fecha Carga']);
+                const date = getJsDate(row);
                 if (!date) return true;
                 const monthStr = date.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
                 return monthStr !== selectedMonth;
@@ -162,9 +177,10 @@ function App() {
     const filteredData = useMemo(() => {
         return data.filter(row => {
             // Driver filter
-            if (selectedDriver && row.Conductor !== selectedDriver) return false;
+            const conductor = findVal(row, ['Conductor', 'Chofer', 'Driver']);
+            if (selectedDriver && conductor !== selectedDriver) return false;
 
-            const date = getJsDate(row['F.Carga'] || row['Fecha Carga']);
+            const date = getJsDate(row);
             if (!date) return false;
 
             // Month filter
@@ -188,15 +204,16 @@ function App() {
 
     const totalImporte = useMemo(() => {
         return filteredData.reduce((sum, row) => {
-            const val = parseFloat(row['Precio'] || row['Euros'] || row['Importe'] || 0);
+            const val = parseFloat(findVal(row, ['Precio', 'Euros', 'Importe', 'Total']) || 0);
             return sum + (isNaN(val) ? 0 : val);
         }, 0);
     }, [filteredData]);
 
-    const formatDate = (dateVal) => {
-        const date = getJsDate(dateVal);
+    // New helper for rendering
+    const renderDate = (row) => {
+        const date = getJsDate(row);
         return date ? date.toLocaleDateString('es-ES') : '';
-    };
+    }
 
     const handlePrint = () => {
         window.print();
@@ -394,22 +411,22 @@ function App() {
                                     <tbody className="divide-y divide-gray-100">
                                         {filteredData.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-gray-50">
-                                                <td className="p-3 text-gray-700">{formatDate(row['F.Carga'] || row['Fecha Carga'])}</td>
-                                                {!selectedDriver && <td className="p-3 text-gray-700 font-medium">{row['Conductor']}</td>}
+                                                <td className="p-3 text-gray-700">{renderDate(row)}</td>
+                                                {!selectedDriver && <td className="p-3 text-gray-700 font-medium">{findVal(row, ['Conductor', 'Chofer', 'Driver'])}</td>}
                                                 <td className="p-3 text-gray-700">
-                                                    <div className="font-medium">{row['Pobl. Carga'] || row['Población Origen']}</div>
-                                                    <div className="text-xs text-gray-500">{row['Ori.Emp'] || row['Empresa Origen']}</div>
+                                                    <div className="font-medium">{findVal(row, ['Pobl. Carga', 'Población Origen', 'Origen'])}</div>
+                                                    <div className="text-xs text-gray-500">{findVal(row, ['Ori.Emp', 'Empresa Origen'])}</div>
                                                 </td>
                                                 <td className="p-3 text-gray-700">
-                                                    <div className="font-medium">{row['Pobl. Descarga'] || row['Población Destino']}</div>
-                                                    <div className="text-xs text-gray-500">{row['Des.Emp'] || row['Empresa Destino']}</div>
+                                                    <div className="font-medium">{findVal(row, ['Pobl. Descarga', 'Población Destino', 'Destino'])}</div>
+                                                    <div className="text-xs text-gray-500">{findVal(row, ['Des.Emp', 'Empresa Destino'])}</div>
                                                 </td>
-                                                <td className="p-3 text-gray-700 font-mono">{row['Mat. Cont.'] || row['Matrícula Contenedor']}</td>
+                                                <td className="p-3 text-gray-700 font-mono">{findVal(row, ['Mat. Cont.', 'Matrícula Contenedor', 'Matricula', 'Contenedor'])}</td>
                                                 <td className="p-3 text-gray-900 font-semibold text-right">
-                                                    {parseFloat(row['Precio'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    {parseFloat(findVal(row, ['Precio', 'Base']) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                                 </td>
                                                 <td className="p-3 text-gray-900 font-semibold text-right">
-                                                    {parseFloat(row['Euros'] || row['Importe'] || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+                                                    {parseFloat(findVal(row, ['Euros', 'Importe', 'Total']) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
                                                 </td>
                                             </tr>
                                         ))}
