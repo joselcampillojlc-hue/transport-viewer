@@ -282,7 +282,7 @@ function App() {
 
     const totalImporte = useMemo(() => {
         return filteredData.reduce((sum, row) => {
-            const val = parseFloat(findVal(row, ['Precio', 'Euros', 'Importe', 'Total', 'Euros Fact.']) || 0);
+            const val = parseFloat(findVal(row, ['Euros']) || 0);
             return sum + (isNaN(val) ? 0 : val);
         }, 0);
     }, [filteredData]);
@@ -516,7 +516,7 @@ function App() {
                                                     {parseFloat(findVal(row, ['Precio', 'Base', 'Pedido Importe'] || 0)).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                                 </td>
                                                 <td className="p-3 text-gray-900 font-semibold text-right">
-                                                    {parseFloat(findVal(row, ['Euros', 'Importe', 'Total', 'Euros Fact.']) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+                                                    {parseFloat(findVal(row, ['Euros']) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
                                                 </td>
                                             </tr>
                                         ))}
