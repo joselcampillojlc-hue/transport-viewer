@@ -341,6 +341,13 @@ function App() {
         }, 0);
     }, [filteredData]);
 
+    const totalPrecio = useMemo(() => {
+        return filteredData.reduce((sum, row) => {
+            const val = parseFloat(findVal(row, ['Precio', 'Base', 'Pedido Importe']) || 0);
+            return sum + (isNaN(val) ? 0 : val);
+        }, 0);
+    }, [filteredData]);
+
     const renderDate = (row) => {
         const date = getJsDate(row);
         return date ? date.toLocaleDateString('es-ES') : '';
@@ -552,13 +559,19 @@ function App() {
                             </div>
 
                             {/* Summary Stats */}
-                            <div className="grid grid-cols-2 gap-4 mb-8 print:mb-4">
-                                <div className="bg-blue-50 p-4 rounded-lg print:border print:bg-white">
-                                    <p className="text-sm text-blue-600 font-medium">Total Viajes Seleccionados</p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 print:mb-4">
+                                <div className="bg-blue-50 p-4 rounded-lg print:border print:bg-white flex flex-col justify-center">
+                                    <p className="text-sm text-blue-600 font-medium whitespace-nowrap">Viajes Seleccionados</p>
                                     <p className="text-2xl font-bold text-blue-900">{filteredData.length}</p>
                                 </div>
-                                <div className="bg-green-50 p-4 rounded-lg print:border print:bg-white">
-                                    <p className="text-sm text-green-600 font-medium">Total Importe</p>
+                                <div className="bg-purple-50 p-4 rounded-lg print:border print:bg-white flex flex-col justify-center">
+                                    <p className="text-sm text-purple-600 font-medium whitespace-nowrap">Total Precio (Base)</p>
+                                    <p className="text-2xl font-bold text-purple-900">
+                                        {totalPrecio.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
+                                    </p>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg print:border print:bg-white flex flex-col justify-center">
+                                    <p className="text-sm text-green-600 font-medium whitespace-nowrap">Total Precio+Adicional</p>
                                     <p className="text-2xl font-bold text-green-900">
                                         {totalImporte.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                                     </p>
