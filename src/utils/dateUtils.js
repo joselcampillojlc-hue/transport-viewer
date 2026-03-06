@@ -18,12 +18,31 @@ export const normalizeDate = (value) => {
         return new Date(Math.round((value - 25569) * 86400 * 1000));
     }
 
-    // Try parsing as standard date string/object
-    const date = new Date(value);
-    
-    // Check if valid date
+    // Try parsing standard formats first
+    let date = new Date(value);
     if (Object.prototype.toString.call(date) === "[object Date]" && !isNaN(date)) {
         return date;
+    }
+
+    // Try parsing string dates specifically formatted as DD/MM/YYYY or DD-MM-YYYY
+    if (typeof value === 'string') {
+        const parts = value.split(/[-/]/);
+        if (parts.length === 3) {
+            // Check if it's DD/MM/YYYY (assuming parts[0] is day, parts[1] is month)
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed in JS Date
+            let year = parseInt(parts[2], 10);
+
+            // Handle 2-digit years
+            if (year < 100) {
+                year += 2000;
+            }
+
+            date = new Date(year, month, day);
+            if (!isNaN(date)) {
+                return date;
+            }
+        }
     }
 
     return null;
@@ -37,11 +56,11 @@ export const normalizeDate = (value) => {
  */
 export const getWeekIdentifier = (date) => {
     if (!date) return '';
-    
+
     const oneJan = new Date(date.getFullYear(), 0, 1);
     const numberOfDays = Math.floor((date - oneJan) / (24 * 60 * 60 * 1000));
     const weekNum = Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
-    
+
     return `Semana ${weekNum} - ${date.getFullYear()}`;
 };
 

@@ -53,7 +53,6 @@ function App() {
         }
     };
 
-    // Helper to upload data to Firebase
     const uploadToFirebase = async (newData, newFileName) => {
         try {
             const docRef = doc(db, "transports", "config");
@@ -63,8 +62,14 @@ function App() {
                 updatedAt: new Date().toISOString()
             });
             console.log("Data successfully uploaded to Firebase");
+            setErrorMsg(''); // Clear previous errors if successful
         } catch (e) {
             console.error("Error uploading to Firebase:", e);
+            if (e.message && e.message.toLowerCase().includes('payload is too large')) {
+                setErrorMsg("Error: El archivo es demasiado grande para guardarse en la nube (Límite de Firebase superado). Los datos solo se mostrarán localmente.");
+            } else {
+                setErrorMsg(`Error al guardar en la nube: ${e.message}`);
+            }
         }
     };
 
@@ -104,6 +109,8 @@ function App() {
             // Read again with the correct header row
             const rawData = XLSX.utils.sheet_to_json(ws, { range: headerRowIndex });
 
+            let missingDatesCount = 0;
+
             // Normalize keys (trim whitespace)
             const jsonData = rawData.map(row => {
                 const newRow = {};
@@ -111,7 +118,20 @@ function App() {
                     newRow[key.trim()] = row[key];
                 });
                 return newRow;
+            }).filter(row => {
+                const d = getJsDate(row);
+                if (!d) {
+                    missingDatesCount++;
+                    return false;
+                }
+                return true;
             });
+
+            if (missingDatesCount > 0) {
+                setErrorMsg(`Aviso: ${missingDatesCount} filas fueron ignoradas porque no tenían una fecha válida o reconocible.`);
+            } else {
+                setErrorMsg('');
+            }
 
             // Set Debug Info
             if (jsonData.length > 0) {
