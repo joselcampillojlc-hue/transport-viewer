@@ -231,6 +231,25 @@ function App() {
         return normalizeDate(val);
     }
 
+    const handlePriceChange = (rowIndex, field, newValue) => {
+        // We use the global 'data' array index to precisely update the row.
+        // But since we are rendering from 'filteredData', we need to find the correct row in 'data'.
+        const targetRow = filteredData[rowIndex];
+        const globalDataIndex = data.indexOf(targetRow);
+
+        if (globalDataIndex !== -1) {
+            const newData = [...data];
+            const updatedRow = { ...newData[globalDataIndex] };
+
+            // To be safe with the multiple possible column names, we ensure the specific key exists
+            updatedRow[field] = newValue;
+
+            newData[globalDataIndex] = updatedRow;
+            setData(newData);
+            uploadToFirebase(newData, fileName);
+        }
+    };
+
     // Derived state for dropdowns (updates automatically when data changes)
     const { drivers, months, weeks } = useMemo(() => {
         const d = new Set();
@@ -607,10 +626,31 @@ function App() {
                                                 </td>
                                                 <td className="p-3 text-gray-700 font-mono">{findVal(row, ['Mat. Cont.', 'Matrícula Contenedor', 'Matricula', 'Contenedor', 'Matricula Contenedor'])}</td>
                                                 <td className="p-3 text-gray-900 font-semibold text-right">
-                                                    {parseFloat(findVal(row, ['Precio', 'Base', 'Pedido Importe'] || 0)).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                    <div className="flex justify-end items-center gap-1">
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            defaultValue={parseFloat(findVal(row, ['Precio', 'Base', 'Pedido Importe']) || 0)}
+                                                            onBlur={(e) => handlePriceChange(idx, 'Precio', e.target.value)}
+                                                            onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                                                            className="w-24 text-right bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:bg-white rounded px-1 transition-colors"
+                                                            title="Clic para editar el precio base"
+                                                        />
+                                                    </div>
                                                 </td>
                                                 <td className="p-3 text-gray-900 font-semibold text-right">
-                                                    {parseFloat(findVal(row, ['Euros']) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })} €
+                                                    <div className="flex justify-end items-center gap-1">
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            defaultValue={parseFloat(findVal(row, ['Euros']) || 0)}
+                                                            onBlur={(e) => handlePriceChange(idx, 'Euros', e.target.value)}
+                                                            onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
+                                                            className="w-24 text-right bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none focus:bg-white rounded px-1 transition-colors"
+                                                            title="Clic para editar los Euros"
+                                                        />
+                                                        <span>€</span>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
