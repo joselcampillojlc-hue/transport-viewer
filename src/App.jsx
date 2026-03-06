@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, Truck, Printer, FileSpreadsheet, Trash2, Filter, FileUp, RefreshCw, FileDown } from 'lucide-react';
+import { Upload, Truck, Printer, FileSpreadsheet, Trash2, Filter, FileUp, RefreshCw, FileDown, FilePlus } from 'lucide-react';
 
 import { db } from './firebaseConfig';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -17,6 +17,7 @@ function App() {
     const [selectedWeek, setSelectedWeek] = useState('');
 
     const fileInputRef = useRef(null);
+    const uploadModeRef = useRef('replace');
 
     const [debugInfo, setDebugInfo] = useState(null);
 
@@ -142,8 +143,17 @@ function App() {
                 });
             }
 
-            setData(jsonData);
-            uploadToFirebase(jsonData, file.name);
+            const mode = uploadModeRef.current;
+            if (mode === 'append') {
+                const appendedData = [...data, ...jsonData];
+                setData(appendedData);
+                const newFileName = fileName.includes(' (y más)') ? fileName : fileName + ' (y más)';
+                setFileName(newFileName);
+                uploadToFirebase(appendedData, newFileName);
+            } else {
+                setData(jsonData);
+                uploadToFirebase(jsonData, file.name);
+            }
 
             // Reset filters when new file is loaded
             setSelectedDriver('');
@@ -193,8 +203,10 @@ function App() {
         XLSX.writeFile(wb, "plantilla_transportes.xlsx");
     };
 
-    const triggerFileUpload = () => {
+    const triggerFileUpload = (mode = 'replace') => {
+        uploadModeRef.current = mode;
         if (fileInputRef.current) {
+            fileInputRef.current.value = ''; // Reset to allow selecting the same file again
             fileInputRef.current.click();
         }
     };
@@ -385,8 +397,17 @@ function App() {
                                     Plantilla
                                 </button>
                                 <button
-                                    onClick={triggerFileUpload}
+                                    onClick={() => triggerFileUpload('append')}
+                                    className="flex items-center gap-2 bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg hover:bg-indigo-200 transition-colors"
+                                    title="Añadir más datos al listado actual"
+                                >
+                                    <FilePlus size={20} />
+                                    Añadir Datos
+                                </button>
+                                <button
+                                    onClick={() => triggerFileUpload('replace')}
                                     className="flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors"
+                                    title="Sustituir los datos actuales por un archivo nuevo"
                                 >
                                     <FileUp size={20} />
                                     Cambiar Archivo
