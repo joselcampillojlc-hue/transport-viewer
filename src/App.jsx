@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, Truck, Printer, FileSpreadsheet, Trash2, Filter, FileUp, RefreshCw } from 'lucide-react';
+import { Upload, Truck, Printer, FileSpreadsheet, Trash2, Filter, FileUp, RefreshCw, FileDown } from 'lucide-react';
 
-import { supabase } from './supabaseClient';
+import { db } from './firebaseConfig';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { normalizeDate, getWeekIdentifier, getMonthIdentifier } from './utils/dateUtils';
 
 function App() {
@@ -31,34 +32,18 @@ function App() {
         setLoading(true);
         setErrorMsg('');
 
-        if (!supabase) {
-            console.error("Supabase client not initialized");
-            setErrorMsg('Error de configuración: Faltan las claves de Supabase. Verifica las variables de entorno.');
-            setLoading(false);
-            return;
-        }
-
         try {
-            console.log("Fetching from Supabase...");
-            const { data: remoteData, error } = await supabase
-                .from('transports')
-                .select('*')
-                .eq('id', 1)
-                .single();
+            console.log("Fetching from Firebase...");
+            const docRef = doc(db, "transports", "config");
+            const docSnap = await getDoc(docRef);
 
-            if (error) {
-                if (error.code !== 'PGRST116') {
-                    console.error("Error fetching data:", error.message);
-                    setErrorMsg(`Error de conexión: ${error.message}`);
-                } else {
-                    console.log("No data found (PGRST116)");
-                }
-            }
-
-            if (remoteData) {
+            if (docSnap.exists()) {
+                const remoteData = docSnap.data();
                 console.log("Data received:", remoteData.filename);
                 setData(remoteData.data || []);
                 setFileName(remoteData.filename || '');
+            } else {
+                console.log("No data found in Firebase");
             }
         } catch (e) {
             console.error("Unexpected error:", e);
@@ -68,21 +53,18 @@ function App() {
         }
     };
 
-    // Helper to upload data to Supabase
-    const uploadToSupabase = async (newData, newFileName) => {
-        if (!supabase) {
-            console.warn("Supabase not configured, skipping upload");
-            return;
-        }
-
+    // Helper to upload data to Firebase
+    const uploadToFirebase = async (newData, newFileName) => {
         try {
-            const { error } = await supabase
-                .from('transports')
-                .upsert({ id: 1, data: newData, filename: newFileName });
-
-            if (error) console.error("Error uploading to Supabase:", error);
+            const docRef = doc(db, "transports", "config");
+            await setDoc(docRef, {
+                data: newData,
+                filename: newFileName,
+                updatedAt: new Date().toISOString()
+            });
+            console.log("Data successfully uploaded to Firebase");
         } catch (e) {
-            console.error("Error uploading:", e);
+            console.error("Error uploading to Firebase:", e);
         }
     };
 
@@ -141,7 +123,7 @@ function App() {
             }
 
             setData(jsonData);
-            uploadToSupabase(jsonData, file.name);
+            uploadToFirebase(jsonData, file.name);
 
             // Reset filters when new file is loaded
             setSelectedDriver('');
@@ -149,6 +131,46 @@ function App() {
             setSelectedWeek('');
         };
         reader.readAsBinaryString(file);
+    };
+
+    const downloadTemplate = () => {
+        // Define the headers based on the parsing logic in handleFileUpload and findVal
+        const headers = [
+            'Fecha',
+            'Conductor',
+            'Población Origen',
+            'Empresa Origen',
+            'Población Destino',
+            'Empresa Destino',
+            'Matrícula Contenedor',
+            'Precio',
+            'Euros'
+        ];
+
+        // Create a sample row
+        const sampleData = [
+            {
+                'Fecha': new Date().toLocaleDateString('es-ES'),
+                'Conductor': 'CONDUCTOR EJEMPLO',
+                'Población Origen': 'VALENCIA',
+                'Empresa Origen': 'PUERTO VALENCIA',
+                'Población Destino': 'MADRID',
+                'Empresa Destino': 'CENTRO LOGISTICO',
+                'Matrícula Contenedor': 'MSCU1234567',
+                'Precio': 500,
+                'Euros': 550
+            }
+        ];
+
+        // Create worksheet
+        const ws = XLSX.utils.json_to_sheet(sampleData, { header: headers });
+
+        // Create workbook
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Plantilla");
+
+        // Generate Excel file and trigger download
+        XLSX.writeFile(wb, "plantilla_transportes.xlsx");
     };
 
     const triggerFileUpload = () => {
@@ -246,7 +268,7 @@ function App() {
         }
 
         setData(newData);
-        uploadToSupabase(newData, newData.length === 0 ? '' : fileName);
+        uploadToFirebase(newData, newData.length === 0 ? '' : fileName);
     };
 
     const getDeleteButtonText = () => {
@@ -335,6 +357,14 @@ function App() {
                                     ref={fileInputRef}
                                 />
                                 <button
+                                    onClick={downloadTemplate}
+                                    className="flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg hover:bg-green-200 transition-colors"
+                                    title="Descargar plantilla de Excel"
+                                >
+                                    <FileDown size={20} />
+                                    Plantilla
+                                </button>
+                                <button
                                     onClick={triggerFileUpload}
                                     className="flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors"
                                 >
@@ -367,21 +397,31 @@ function App() {
                             <FileSpreadsheet size={64} />
                         </div>
                         <h2 className="text-xl font-semibold text-gray-700 mb-2">Sube tu archivo Excel</h2>
-                        <p className="text-gray-500 mb-6">Selecciona el archivo con los datos de transporte</p>
-                        <input
-                            type="file"
-                            accept=".xlsx, .xls"
-                            onChange={handleFileUpload}
-                            className="hidden"
-                            id="file-upload"
-                        />
-                        <label
-                            htmlFor="file-upload"
-                            className="cursor-pointer bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
-                        >
-                            <Upload size={20} />
-                            Seleccionar Archivo
-                        </label>
+                        <p className="text-gray-500 mb-6">Selecciona el archivo con los datos de transporte o descarga la plantilla</p>
+                        <div className="flex flex-col sm:flex-row justify-center gap-4">
+                            <input
+                                type="file"
+                                accept=".xlsx, .xls"
+                                onChange={handleFileUpload}
+                                className="hidden"
+                                id="file-upload"
+                            />
+                            <label
+                                htmlFor="file-upload"
+                                className="cursor-pointer bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                            >
+                                <Upload size={20} />
+                                Seleccionar Archivo
+                            </label>
+
+                            <button
+                                onClick={downloadTemplate}
+                                className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+                            >
+                                <FileDown size={20} />
+                                Descargar Plantilla
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -551,6 +591,11 @@ function App() {
                     </div>
                 )}
             </div>
+
+            {/* Footer */}
+            <footer className="mt-8 text-center text-xs text-gray-400 print:hidden">
+                © 2026 JOSE LUIS CAMPILLO
+            </footer>
         </div>
     );
 }
